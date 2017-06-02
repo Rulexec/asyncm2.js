@@ -96,12 +96,7 @@ function AsyncM(options) {
 					continue;
 				}
 
-				let nextDirectList = m._reversedFlowList.toDirectList();
-
-				nextDirectList.attachDirectList(directFlowList);
-
-				mRunner = nextDirectList.getData();
-				directFlowList = nextDirectList;
+				mRunner = directFlowList.prependReversedList(m._reversedFlowList);
 
 				doRun();
 
@@ -143,12 +138,7 @@ function AsyncM(options) {
 					continue;
 				}
 
-				let nextDirectList = m._reversedFlowList.toDirectList();
-
-				nextDirectList.attachDirectList(directFlowList);
-
-				mRunner = nextDirectList.getData();
-				directFlowList = nextDirectList;
+				mRunner = directFlowList.prependReversedList(m._reversedFlowList);
 
 				doRun();
 
@@ -163,45 +153,55 @@ function AsyncM(options) {
 		// TODO: must return a monad to be cancellable
 		// But anyway, `onCancel` must be called even if cancel is cancelled
 		function cancelHandling(originalData, errorData, resultData, onResult, onError) {
-			while (true) {
-				let layer = directFlowList.takeLayer();
+			let cancelChainM = errorData ? AsyncM.error(errorData) : AsyncM.result(resultData);
 
-				if (!layer) break;
+			cancelChainM.next(resultCancelHandler, errorCancelHandler
+			).run(function(result) {
+				if (onCancel) onCancel(originalData, null, result);
+				onResult();
+			}, function(error) {
+				if (onCancel) onCancel(originalData, error);
+				onResult();
+			});
 
-				if (!layer.cancel) continue;
+			function resultCancelHandler(result) {
+				var cancelHandler = takeCancelHandler();
 
-				let m = layer.cancel(originalData, errorData, resultData);
-
-				if (!(m instanceof AsyncM)) {
-					if (m) {
-						onCancel(originalData, null, m);
-						onResult();
-					} else {
-						onCancel(originalData, errorData, resultData);
-						onResult();
-					}
-
+				if (!cancelHandler) {
 					return;
 				}
 
-				m.run(
-					function(result) {
-						onCancel(originalData, null, result);
-						onResult();
-					},
-					function(error) {
-						onCancel(originalData, error);
-						onResult();
-					},
-					// It cannot be cancelled, TODO
-					function(){}
-				);
+				var m = cancelHandler(originalData, null, result);
 
-				return;
+				if (!(m instanceof AsyncM)) m = AsyncM.result(m || result);
+
+				return m.next(resultCancelHandler, errorCancelHandler);
+			}
+			function errorCancelHandler(error) {
+				var cancelHandler = takeCancelHandler();
+
+				if (!cancelHandler) {
+					return;
+				}
+
+				var m = cancelHandler(originalData, error);
+
+				if (!(m instanceof AsyncM)) m = m ? AsyncM.result(m) : AsyncM.error(error);
+
+				return m.next(resultCancelHandler, errorCancelHandler);
 			}
 
-			onCancel(originalData, errorData, resultData);
-			onResult();
+			function takeCancelHandler() {
+				while (true) {
+					let layer = directFlowList.takeLayerWithCancelAndDropPrepended();
+
+					if (!layer) return null;
+
+					if (!layer.cancel) continue;
+
+					return layer.cancel;
+				}
+			}
 		}
 
 		return {

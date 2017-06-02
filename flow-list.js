@@ -31,51 +31,78 @@ function ReversedFlowList(options) {
 	};
 
 	this.toDirectList = function() {
-		let list = [],
-		    attachedLists = [];
+		let lists = [];
 
-		let node = this;
+		let direct = reversedToListAndData(this);
 
-		while (node._prev) {
-			list.push({
-				result: node._result,
-				error: node._error,
-				cancel: node._cancel
-			});
+		let data = direct.data;
 
-			node = node._prev;
-		}
+		lists.push(direct.list);
 
-		let data = null;
+		function reversedToListAndData(reversedList) {
+			let list = [];
 
-		if (node._data) {
-			data = node._data;
+			let node = reversedList;
+
+			while (node._prev) {
+				list.push({
+					result: node._result,
+					error: node._error,
+					cancel: node._cancel
+				});
+
+				node = node._prev;
+			}
+
+			return {
+				list: list,
+				data: node._data
+			};
 		}
 
 		return {
+			prependReversedList: function(reversedList) {
+				let direct = reversedToListAndData(reversedList);
+
+				lists.unshift(direct.list);
+
+				return direct.data;
+			},
+
 			takeLayer: function() {
-				if (list.length) {
-					return list.pop();
+				while (lists.length) {
+					let list = lists[0];
+
+					while (list.length) {
+						return list.pop();
+					}
+
+					lists.shift();
 				}
 
-				while (attachedLists.length) {
-					let attachedList = attachedLists[0];
+				return null;
+			},
+			takeLayerWithCancelAndDropPrepended: function() {
+				while (lists.length) {
+					let list = lists[0];
 
-					let layer = attachedList.takeLayer();
+					while (list.length) {
+						let layer = list.pop();
 
-					if (layer) return layer;
+						if (layer.cancel) {
+							lists.shift();
 
-					attachedLists.shift();
+							return layer;
+						}
+					}
+
+					lists.shift();
 				}
 
 				return null;
 			},
 
-			getData: function() { return data; },
-
-			attachDirectList: function(otherList) {
-				attachedLists.push(otherList);
-			}
+			getData: function() { return data; }
 		};
 	};
 }

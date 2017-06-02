@@ -27,6 +27,14 @@ describe('M', function() {
 				done();
 			});
 		});
+
+		it('should not fail on no handler', function(done) {
+			var running = M.sleep(1000).run();
+
+			running.cancel().run(function() {
+				done();
+			});
+		});
 	});
 	
 	describe('chained cancel', function() {
@@ -193,4 +201,42 @@ describe('M', function() {
 			}, 250);
 		});
 	});
+
+	describe('nested cancel', function() {
+		it('should be processed by each handler', function(done) {
+			var firstCancelHandlerExecuted = false,
+			    secondCancelHandlerExecuted = false,
+			    finalCancelHandlerExecuted = false;
+
+			var wrongCancelExecuted = false;
+
+			var running = M.sleep(0
+			).result(function() {
+				return M.sleep(0
+				).result(function() {
+					return M.sleep(10000);
+				}).cancel(function() {
+					firstCancelHandlerExecuted = true;
+				}).cancel(function() {
+					wrongCancelExecuted = true;
+				});
+			}).cancel(function() {
+				secondCancelHandlerExecuted = true;
+			}).run(null, null, function() {
+				finalCancelHandlerExecuted = true;
+			});
+
+			setTimeout(function() {
+				running.cancel(42).run(function() {
+					assert(finalCancelHandlerExecuted, 'final');
+					assert(firstCancelHandlerExecuted, 'first');
+					assert(secondCancelHandlerExecuted, 'second');
+
+					assert(!wrongCancelExecuted);
+
+					done();
+				});
+			}, 50);
+		});
+	})
 });
