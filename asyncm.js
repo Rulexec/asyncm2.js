@@ -45,7 +45,7 @@ function AsyncM(options) {
 			if (!running || !running.cancel) {
 				hasFakeRunning = true;
 
-				running = {
+				let fakeRunning = {
 					cancel: AsyncM.fun(function(onResult, onError, data) {
 						if (cancelledAtCounter !== null) {
 							onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
@@ -63,6 +63,8 @@ function AsyncM(options) {
 						};
 					})
 				};
+
+				running = fakeRunning;
 			}
 		}
 
@@ -158,10 +160,10 @@ function AsyncM(options) {
 			cancelChainM.next(resultCancelHandler, errorCancelHandler
 			).run(function(result) {
 				if (onCancel) onCancel(originalData, null, result);
-				onResult();
+				onResult(result);
 			}, function(error) {
 				if (onCancel) onCancel(originalData, error);
-				onResult();
+				onError(error);
 			});
 
 			function resultCancelHandler(result) {
@@ -222,17 +224,41 @@ function AsyncM(options) {
 					cancelCallback = function() {};
 				}
 
-				// TODO: cancel must be continued with `cancelHandling` monad
+				var cancelWaiters = [];
 
-				return running.cancel(data).run(
+				var cancelRunning = running.cancel(data).run(
 					function(result) {
-						cancelHandling(data, null, result, onResult, onError);
+						cancelHandling(data, null, result, cancelFinishHandling(onResult), cancelFinishHandling(onError));
 					},
 					function(error) {
-						cancelHandling(data, error, null, onResult, onError);
-					},
-					function() {}
+						cancelHandling(data, error, null, cancelFinishHandling(onResult), cancelFinishHandling(onError));
+					}
 				);
+
+				function cancelFinishHandling(cont) {
+					return function(data) {
+						cancelRunning = null;
+
+						cancelWaiters.forEach(function(f) {
+							f(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+						});
+
+						cancelWaiters = null;
+
+						cont(data);
+					};
+				}
+
+				return {
+					cancel: AsyncM.fun(function(onResult, onError, data) {
+						if (!cancelRunning) {
+							onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+							return;
+						}
+
+						cancelWaiters.push(onError);
+					})
+				};
 			})
 		};
 	};
@@ -245,6 +271,14 @@ function AsyncM(options) {
 	};
 	this.cancel = function(cancelHandler) {
 		return this.next(null, null, cancelHandler);
+	};
+
+	this.skipAny = function(m) {
+		return this.next(function() {
+			return m;
+		}, function() {
+			return m;
+		}, null);
 	};
 }
 
@@ -266,6 +300,12 @@ AsyncM.result = function(result) {
 };
 AsyncM.error = function(error) {
 	return AsyncM.create(function(onResult, onError) { onError(error); });
+};
+
+AsyncM.pureM = function(f) {
+	return AsyncM.create(function(onResult, onError) {
+		return f().run(onResult, onError);
+	});
 };
 
 AsyncM.sleep = function(t) {
@@ -299,6 +339,12 @@ AsyncM.sleep = function(t) {
 				});
 			}
 		};
+	});
+};
+
+AsyncM.never = function() {
+	return AsyncM.create(function(){
+		return {cancel: function() { return AsyncM.result(); }};
 	});
 };
 

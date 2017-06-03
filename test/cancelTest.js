@@ -238,5 +238,50 @@ describe('M', function() {
 				});
 			}, 50);
 		});
-	})
+	});
+
+	describe('cancel of cancel', function() {
+		it('should process cancel anyway', function(done) {
+			var cancelHandlerExecuted = false;
+
+			var running = M.sleep(1000
+			).cancel(function() {
+				return M.sleep(250).result(function() {
+					cancelHandlerExecuted = true;
+				});
+			}).run();
+
+			running.cancel(1).run().cancel(2).run(null, function(error) {
+				assert(cancelHandlerExecuted);
+				assert.equal(error, M.CANCEL_ERROR.ALREADY_FINISHED);
+
+				done();
+			});
+		});
+	});
+
+	describe('cancel of cancel of cancel', function() {
+		it('should process cancel anyway', function(done) {
+			var cancelHandlerExecuted = false;
+
+			var running = M.sleep(1000
+			).cancel(function(data) {
+				return M.sleep(100).result(function() {
+					cancelHandlerExecuted = true;
+				});
+			}).run();
+
+			running.cancel(1).run().cancel(2).cancel(function(data, error, result) {
+				return M.sleep(100).result(function() {
+					return 42;
+				});
+			}).run().cancel(3).run(function(result) {
+				assert(cancelHandlerExecuted);
+
+				assert.equal(result, 42);
+
+				done();
+			});
+		});
+	});
 });
