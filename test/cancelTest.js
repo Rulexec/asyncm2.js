@@ -258,6 +258,16 @@ describe('M', function() {
 				done();
 			});
 		});
+
+		it('should pass without errors', function(done) {
+			var running = M.sleep(1000).run();
+
+			running.cancel().run().cancel().run(null, function(error) {
+				assert.equal(error, M.CANCEL_ERROR.ALREADY_FINISHED);
+
+				done();
+			});
+		});
 	});
 
 	describe('cancel of cancel of cancel', function() {

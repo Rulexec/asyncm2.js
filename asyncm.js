@@ -224,7 +224,8 @@ function AsyncM(options) {
 					cancelCallback = function() {};
 				}
 
-				var cancelWaiters = [];
+				var cancelWaiters = [],
+				    finished = false;
 
 				var cancelRunning = running.cancel(data).run(
 					function(result) {
@@ -235,8 +236,14 @@ function AsyncM(options) {
 					}
 				);
 
+				if (finished) {
+					cancelRunning = null;
+				}
+
 				function cancelFinishHandling(cont) {
 					return function(data) {
+						finished = true;
+
 						cancelRunning = null;
 
 						cancelWaiters.forEach(function(f) {
@@ -251,7 +258,7 @@ function AsyncM(options) {
 
 				return {
 					cancel: AsyncM.fun(function(onResult, onError, data) {
-						if (!cancelRunning) {
+						if (finished) {
 							onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
 							return;
 						}
