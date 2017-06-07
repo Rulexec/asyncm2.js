@@ -27,3 +27,7 @@ module.exports = {
 		})
 	]
 };
+
+if (process.env.LOCAL) {
+	module.exports.plugins = [];
+}

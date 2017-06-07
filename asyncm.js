@@ -32,6 +32,8 @@ function AsyncM(options) {
 
 		var running, hasFakeRunning;
 
+		var runningFinishedSync;
+
 		doRun();
 
 		function doRun(m) {
@@ -41,6 +43,12 @@ function AsyncM(options) {
 				resultHandling.bind(null, executionCounter),
 				errorHandling.bind(null, executionCounter)
 			);
+
+			if (runningFinishedSync) {
+				running = null;
+
+				return;
+			}
 
 			if (!running || !running.cancel) {
 				hasFakeRunning = true;
@@ -98,6 +106,8 @@ function AsyncM(options) {
 					continue;
 				}
 
+				if (m.__pureMF) m = m.__pureMF();
+
 				mRunner = directFlowList.prependReversedList(m._reversedFlowList);
 
 				doRun();
@@ -106,6 +116,8 @@ function AsyncM(options) {
 			}
 
 			running = null;
+
+			runningFinishedSync = true;
 
 			if (onResult) onResult(result);
 		}
@@ -140,6 +152,8 @@ function AsyncM(options) {
 					continue;
 				}
 
+				if (m.__pureMF) m = m.__pureMF();
+
 				mRunner = directFlowList.prependReversedList(m._reversedFlowList);
 
 				doRun();
@@ -148,6 +162,8 @@ function AsyncM(options) {
 			}
 
 			running = null;
+
+			runningFinishedSync = true;
 
 			if (onError) onError(error);
 		}
@@ -208,26 +224,29 @@ function AsyncM(options) {
 
 		return {
 			cancel: AsyncM.fun(function(onResult, onError, data) {
-				if (!hasFakeRunning) {
-					if (!running) {
-						onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
-						return;
-					}
+				if (!running) {
+					onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+					return;
+				}
 
+				if (!hasFakeRunning) {
 					if (cancelledAtCounter !== null) {
 						onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
 						return;
 					}
-
-					// Ignore results of function calls
-					cancelledAtCounter = executionCounter;
-					cancelCallback = function() {};
 				}
+
+				// Ignore results of function calls
+				cancelledAtCounter = executionCounter;
+				cancelCallback = function() {};
 
 				var cancelWaiters = [],
 				    finished = false;
 
-				var cancelRunning = running.cancel(data).run(
+				var oldRunning = running;
+				running = null;
+
+				var cancelRunning = oldRunning.cancel(data).run(
 					function(result) {
 						cancelHandling(data, null, result, cancelFinishHandling(onResult), cancelFinishHandling(onError));
 					},
@@ -310,9 +329,13 @@ AsyncM.error = function(error) {
 };
 
 AsyncM.pureM = function(f) {
-	return AsyncM.create(function(onResult, onError) {
+	var m = AsyncM.create(function(onResult, onError) {
 		return f().run(onResult, onError);
 	});
+
+	m.__pureMF = f;
+
+	return m;
 };
 
 AsyncM.sleep = function(t) {
