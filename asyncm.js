@@ -1,5 +1,7 @@
 module.exports = AsyncM;
 
+require('./asyncmUtil')(AsyncM);
+
 if (typeof window !== 'undefined') {
 	window.AsyncM = AsyncM;
 }
@@ -32,16 +34,27 @@ function AsyncM(options) {
 
 		var running, hasFakeRunning;
 
-		var runningFinishedSync;
+		var runningSync, runnedSync;
 
-		doRun();
+		while (true) {
+			runningSync = true;
+			runnedSync = false;
+
+			doRun();
+
+			runningSync = false;
+
+			if (!runnedSync) break;
+		}
 
 		function doRun(m) {
 			hasFakeRunning = false;
 
+			var runningFinishedSync = false;
+
 			running = mRunner(
-				resultHandling.bind(null, executionCounter),
-				errorHandling.bind(null, executionCounter)
+				nextHandling(executionCounter, 'result', onResult),
+				nextHandling(executionCounter, 'error', onError)
 			);
 
 			if (runningFinishedSync) {
@@ -74,98 +87,58 @@ function AsyncM(options) {
 
 				running = fakeRunning;
 			}
-		}
 
-		function resultHandling(execCounter, result) {
-			// Ignore second-time run
-			if (executionCounter !== execCounter) return;
+			function nextHandling(execCounter, layerName, finalHandler) {
+				return function(data) {
+					// Ignore second-time run
+					if (executionCounter !== execCounter) return;
 
-			executionCounter++;
+					executionCounter++;
 
-			if (cancelledAtCounter === execCounter) {
-				cancelCallback();
-				return;
+					if (cancelledAtCounter === execCounter) {
+						cancelCallback();
+						return;
+					}
+
+					// Ignore... what?
+					if (cancelledAtCounter !== null) return;
+
+					while (true) {
+						let layer = directFlowList.takeLayer();
+
+						if (!layer) break;
+
+						if (!layer[layerName]) continue;
+
+						let m = layer[layerName](data);
+
+						if (!m) continue;
+
+						if (!(m instanceof AsyncM)) {
+							data = m;
+							continue;
+						}
+
+						if (m.__pureMF) m = m.__pureMF();
+
+						mRunner = directFlowList.prependReversedList(m._reversedFlowList);
+
+						if (runningSync) {
+							runnedSync = true;
+						} else {
+							doRun();
+						}
+
+						return;
+					}
+
+					running = null;
+
+					runningFinishedSync = true;
+
+					if (finalHandler) finalHandler(data);
+				};
 			}
-
-			// Ignore... what?
-			if (cancelledAtCounter !== null) return;
-
-			while (true) {
-				let layer = directFlowList.takeLayer();
-
-				if (!layer) break;
-
-				if (!layer.result) continue;
-
-				let m = layer.result(result);
-
-				if (!m) continue;
-
-				if (!(m instanceof AsyncM)) {
-					result = m;
-					continue;
-				}
-
-				if (m.__pureMF) m = m.__pureMF();
-
-				mRunner = directFlowList.prependReversedList(m._reversedFlowList);
-
-				doRun();
-
-				return;
-			}
-
-			running = null;
-
-			runningFinishedSync = true;
-
-			if (onResult) onResult(result);
-		}
-
-		function errorHandling(execCounter, error) {
-			// Ignore second-time run
-			if (executionCounter !== execCounter) return;
-
-			executionCounter++;
-
-			if (cancelledAtCounter === execCounter) {
-				cancelCallback();
-				return;
-			}
-
-			// Ignore... what?
-			if (cancelledAtCounter !== null) return;
-
-			while (true) {
-				let layer = directFlowList.takeLayer();
-
-				if (!layer) break;
-
-				if (!layer.error) continue;
-
-				let m = layer.error(error);
-
-				if (!m) continue;
-
-				if (!(m instanceof AsyncM)) {
-					error = m;
-					continue;
-				}
-
-				if (m.__pureMF) m = m.__pureMF();
-
-				mRunner = directFlowList.prependReversedList(m._reversedFlowList);
-
-				doRun();
-
-				return;
-			}
-
-			running = null;
-
-			runningFinishedSync = true;
-
-			if (onError) onError(error);
 		}
 
 		// TODO: must return a monad to be cancellable
@@ -288,24 +261,6 @@ function AsyncM(options) {
 			})
 		};
 	};
-
-	this.result = function(resultHandler) {
-		return this.next(resultHandler, null, null);
-	};
-	this.error = function(errorHandler) {
-		return this.next(null, errorHandler, null);
-	};
-	this.cancel = function(cancelHandler) {
-		return this.next(null, null, cancelHandler);
-	};
-
-	this.skipAny = function(m) {
-		return this.next(function() {
-			return m;
-		}, function() {
-			return m;
-		}, null);
-	};
 }
 
 AsyncM.CANCEL_ERROR = {
@@ -336,54 +291,4 @@ AsyncM.pureM = function(f) {
 	m.__pureMF = f;
 
 	return m;
-};
-
-AsyncM.sleep = function(t) {
-	return AsyncM.create(function(onResult) {
-		var finished = false;
-
-		var timeoutId = setTimeout(function() {
-			finished = true;
-
-			onResult();
-		}, t);
-
-		return {
-			cancel: function(data) {
-				return AsyncM.create(function(onResult, onError) {
-					if (timeoutId === null) {
-						onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
-						return;
-					}
-
-					if (finished) {
-						onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
-						return;
-					}
-
-					clearTimeout(timeoutId);
-
-					timeoutId = null;
-
-					onResult(data);
-				});
-			}
-		};
-	});
-};
-
-AsyncM.never = function() {
-	return AsyncM.create(function(){
-		return {cancel: function() { return AsyncM.result(); }};
-	});
-};
-
-AsyncM.fun = function(f) {
-	return function() {
-		var args = arguments;
-
-		return AsyncM.create(function(onResult, onError) {
-			return f.apply(this, [onResult, onError].concat(Array.from(args)));
-		});
-	};
 };
