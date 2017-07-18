@@ -1,20 +1,19 @@
 {
-  "name": "asyncm2",
-  "version": "0.0.1",
+  "name": "asyncm",
+  "version": "1.0.2",
   "description": "",
   "main": "asyncm.js",
   "directories": {
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "./node_modules/.bin/mocha"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "Alexander Ruliov <alexander.ruliov@gmail.com>",
   "devDependencies": {
-    "babel-loader": "^7.0.0",
-    "babel-preset-es2015-webpack": "^6.4.3",
-    "mocha": "^3.4.2",
-    "webpack": "^2.6.1"
+    "babel-loader": "7.0.0",
+    "babel-preset-es2015-webpack": "6.4.3",
+    "mocha": "3.4.2",
+    "webpack": "2.6.1"
   }
 }
