@@ -1,1 +1,622 @@
-!function(n){function r(e){if(t[e])return t[e].exports;var u=t[e]={i:e,l:!1,exports:{}};return n[e].call(u.exports,u,u.exports,r),u.l=!0,u.exports}var t={};r.m=n,r.c=t,r.i=function(n){return n},r.d=function(n,t,e){r.o(n,t)||Object.defineProperty(n,t,{configurable:!1,enumerable:!0,get:e})},r.n=function(n){var t=n&&n.__esModule?function(){return n.default}:function(){return n};return r.d(t,"a",t),t},r.o=function(n,r){return Object.prototype.hasOwnProperty.call(n,r)},r.p="",r(r.s=2)}([function(n,r,t){"use strict";function e(n){n.prototype.result=function(n){return this.next(n,null,null)},n.prototype.error=function(n){return this.next(null,n,null)},n.prototype.cancel=function(n){return this.next(null,null,n)},n.prototype.skipAny=function(n){return this.next(function(){return n},function(){return n},null)},n.sleep=function(r){return n.create(function(t){var e=!1,u=setTimeout(function(){e=!0,t()},r);return{cancel:function(r){return n.create(function(t,i){return null===u?void i(n.CANCEL_ERROR.ALREADY_CANCELLED):e?void i(n.CANCEL_ERROR.ALREADY_FINISHED):(clearTimeout(u),u=null,void t(r))})}}})},n.never=function(){return n.create(function(){return{cancel:function(){return n.result()}}})},n.fun=function(r){return function(){var t=arguments;return n.create(function(n,e){return r.apply(this,[n,e].concat(Array.from(t)))})}}}n.exports=e},function(n,r,t){"use strict";function e(n){this._data=n&&n.data,this._prev=null,this._result=null,this._error=null,this._cancel=null,this.addLayer=function(n,r,t){var u=new e;return u._prev=this,u._result=n,u._error=r,u._cancel=t,u},this.toDirectList=function(){function n(n){for(var r=[],t=n;t._prev;)r.push({result:t._result,error:t._error,cancel:t._cancel}),t=t._prev;return{list:r,data:t._data}}var r=[],t=n(this),e=t.data;return r.push(t.list),{prependReversedList:function(t){var e=n(t);return r.unshift(e.list),e.data},takeLayer:function(){for(;r.length;){for(var n=r[0];n.length;)return n.pop();r.shift()}return null},takeLayerWithCancelAndDropPrepended:function(){for(;r.length;){for(var n=r[0];n.length;){var t=n.pop();if(t.cancel)return r.shift(),t}r.shift()}return null},getData:function(){return e}}}}n.exports=e},function(n,r,t){"use strict";function e(n){var r=n.reversedFlowList;this._reversedFlowList=r,this.next=function(n,t,u){return new e({reversedFlowList:r.addLayer(n,t,u)})},this.run=function(n,t,u){function i(r){function u(n,r,t){return function(u){if(v===n){if(v++,p===n)return void _();if(null===p){for(;;){var o=s.takeLayer();if(!o)break;if(o[r]){var l=o[r](u);if(l){if(l instanceof e)return l.__pureMF&&(l=l.__pureMF()),d=s.prependReversedList(l._reversedFlowList),void(f?a=!0:i());u=l}}}c=null,E=!0,t&&t(u)}}}}l=!1;var E=!1;if(c=d(u(v,"result",n),u(v,"error",t)),E)return void(c=null);if(!c||!c.cancel){l=!0;var L={cancel:e.fun(function(n,r,t){return null!==p?void r(e.CANCEL_ERROR.ALREADY_CANCELLED):c?(p=v,void(_=function(){o(t,null,null,n,r)})):void r(e.CANCEL_ERROR.ALREADY_FINISHED)})};c=L}}function o(n,r,t,i,o){function c(r){var t=f();if(t){var u=t(n,null,r);return u instanceof e||(u=e.result(u||r)),u.next(c,l)}}function l(r){var t=f();if(t){var u=t(n,r);return u instanceof e||(u=u?e.result(u):e.error(r)),u.next(c,l)}}function f(){for(;;){var n=s.takeLayerWithCancelAndDropPrepended();if(!n)return null;if(n.cancel)return n.cancel}}(r?e.error(r):e.result(t)).next(c,l).run(function(r){u&&u(n,null,r),i(r)},function(r){u&&u(n,r),o(r)})}for(var c,l,f,a,s=r.toDirectList(),d=s.getData(),v=0,p=null,_=null;;)if(f=!0,a=!1,i(),f=!1,!a)break;return{cancel:e.fun(function(n,r,t){function u(n){return function(r){f=!0,s=null,i.forEach(function(n){n(e.CANCEL_ERROR.ALREADY_FINISHED)}),i=null,n(r)}}if(!c)return void r(e.CANCEL_ERROR.ALREADY_FINISHED);if(!l&&null!==p)return void r(e.CANCEL_ERROR.ALREADY_CANCELLED);p=v,_=function(){};var i=[],f=!1,a=c;c=null;var s=a.cancel(t).run(function(e){o(t,null,e,u(n),u(r))},function(e){o(t,e,null,u(n),u(r))});return f&&(s=null),{cancel:e.fun(function(n,r,t){if(f)return void r(e.CANCEL_ERROR.ALREADY_FINISHED);i.push(r)})}})}}}n.exports=e,t(0)(e),"undefined"!=typeof window&&(window.AsyncM=e);var u=t(1);e.CANCEL_ERROR={ALREADY_FINISHED:"already_finished",ALREADY_CANCELLED:"already_cancelled"},e.create=function(n){return new e({reversedFlowList:new u({data:n})})},e.result=function(n){return e.create(function(r){r(n)})},e.error=function(n){return e.create(function(r,t){t(n)})},e.pureM=function(n){var r=e.create(function(r,t){return n().run(r,t)});return r.__pureMF=n,r}}]);
+/******/ (function(modules) { // webpackBootstrap
+/******/ 	// The module cache
+/******/ 	var installedModules = {};
+/******/
+/******/ 	// The require function
+/******/ 	function __webpack_require__(moduleId) {
+/******/
+/******/ 		// Check if module is in cache
+/******/ 		if(installedModules[moduleId]) {
+/******/ 			return installedModules[moduleId].exports;
+/******/ 		}
+/******/ 		// Create a new module (and put it into the cache)
+/******/ 		var module = installedModules[moduleId] = {
+/******/ 			i: moduleId,
+/******/ 			l: false,
+/******/ 			exports: {}
+/******/ 		};
+/******/
+/******/ 		// Execute the module function
+/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+/******/
+/******/ 		// Flag the module as loaded
+/******/ 		module.l = true;
+/******/
+/******/ 		// Return the exports of the module
+/******/ 		return module.exports;
+/******/ 	}
+/******/
+/******/
+/******/ 	// expose the modules object (__webpack_modules__)
+/******/ 	__webpack_require__.m = modules;
+/******/
+/******/ 	// expose the module cache
+/******/ 	__webpack_require__.c = installedModules;
+/******/
+/******/ 	// identity function for calling harmony imports with the correct context
+/******/ 	__webpack_require__.i = function(value) { return value; };
+/******/
+/******/ 	// define getter function for harmony exports
+/******/ 	__webpack_require__.d = function(exports, name, getter) {
+/******/ 		if(!__webpack_require__.o(exports, name)) {
+/******/ 			Object.defineProperty(exports, name, {
+/******/ 				configurable: false,
+/******/ 				enumerable: true,
+/******/ 				get: getter
+/******/ 			});
+/******/ 		}
+/******/ 	};
+/******/
+/******/ 	// getDefaultExport function for compatibility with non-harmony modules
+/******/ 	__webpack_require__.n = function(module) {
+/******/ 		var getter = module && module.__esModule ?
+/******/ 			function getDefault() { return module['default']; } :
+/******/ 			function getModuleExports() { return module; };
+/******/ 		__webpack_require__.d(getter, 'a', getter);
+/******/ 		return getter;
+/******/ 	};
+/******/
+/******/ 	// Object.prototype.hasOwnProperty.call
+/******/ 	__webpack_require__.o = function(object, property) { return Object.prototype.hasOwnProperty.call(object, property); };
+/******/
+/******/ 	// __webpack_public_path__
+/******/ 	__webpack_require__.p = "";
+/******/
+/******/ 	// Load entry module and return exports
+/******/ 	return __webpack_require__(__webpack_require__.s = 2);
+/******/ })
+/************************************************************************/
+/******/ ([
+/* 0 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = inject;
+
+function inject(AsyncM) {
+
+	AsyncM.prototype.result = function (resultHandler) {
+		return this.next(resultHandler, null, null);
+	};
+	AsyncM.prototype.error = function (errorHandler) {
+		return this.next(null, errorHandler, null);
+	};
+	AsyncM.prototype.cancel = function (cancelHandler) {
+		return this.next(null, null, cancelHandler);
+	};
+
+	AsyncM.prototype.skipAny = function (m) {
+		return this.next(function () {
+			return m;
+		}, function () {
+			return m;
+		}, null);
+	};
+
+	AsyncM.prototype.skipResult = function (m) {
+		return this.result(function () {
+			return m;
+		});
+	};
+
+	AsyncM.prototype.skipError = function (m) {
+		return this.error(function () {
+			return m;
+		});
+	};
+
+	AsyncM.pureF = function (f) {
+		return function () {
+			return AsyncM.pureM(f.bind(this, arguments));
+		};
+	};
+
+	AsyncM.sleep = function (t) {
+		return AsyncM.create(function (onResult) {
+			var finished = false;
+
+			var timeoutId = setTimeout(function () {
+				finished = true;
+
+				onResult();
+			}, t);
+
+			return {
+				cancel: function cancel(data) {
+					return AsyncM.create(function (onResult, onError) {
+						if (timeoutId === null) {
+							onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
+							return;
+						}
+
+						if (finished) {
+							onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+							return;
+						}
+
+						clearTimeout(timeoutId);
+
+						timeoutId = null;
+
+						onResult(data);
+					});
+				}
+			};
+		});
+	};
+
+	AsyncM.never = function () {
+		return AsyncM.create(function () {
+			return { cancel: function cancel() {
+					return AsyncM.result();
+				} };
+		});
+	};
+
+	AsyncM.fun = function (f) {
+		return function () {
+			var args = arguments;
+
+			return AsyncM.create(function (onResult, onError) {
+				return f.apply(this, [onResult, onError].concat(Array.from(args)));
+			});
+		};
+	};
+
+	AsyncM.parallel = function (ms, options) {
+		var f = options && options.f,
+		    drop = options && options.drop;
+
+		return AsyncM.create(function (onResult, onError) {
+			var results = !drop && [];
+
+			var results_left = ms.length;
+
+			ms.forEach(function (x, i) {
+				var m;
+
+				if (f) m = f(x, i);else m = x;
+
+				if (!drop) results.push(null);
+
+				var finished = false;
+
+				m.run(function (result) {
+					if (finished) return;
+					finished = true;
+
+					if (!drop) results[i] = result;
+
+					results_left--;
+
+					if (results_left === 0) {
+						onResult(results);
+					}
+				}, function (error) {
+					if (finished) return;
+					finished = true;
+
+					onError(error);
+				});
+			});
+		});
+	};
+}
+
+/***/ }),
+/* 1 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+/*
+ * This is immutable tree of async control flow.
+ *
+ * It has a start node, that represent currently executing monad (or that will be executed),
+ * and this node connected to 3 types of handlers: result, error, cancel.
+ *
+ * And then every handler can be connected to next layer of handlers.
+ */
+
+module.exports = ReversedFlowList;
+
+function ReversedFlowList(options) {
+	this._data = options && options.data;
+
+	this._prev = null;
+
+	this._result = null;
+	this._error = null;
+	this._cancel = null;
+
+	this.addLayer = function (resultData, errorData, cancelData) {
+		var list = new ReversedFlowList();
+
+		list._prev = this;
+
+		list._result = resultData;
+		list._error = errorData;
+		list._cancel = cancelData;
+
+		return list;
+	};
+
+	this.toDirectList = function () {
+		var lists = [];
+
+		var direct = reversedToListAndData(this);
+
+		var data = direct.data;
+
+		lists.push(direct.list);
+
+		function reversedToListAndData(reversedList) {
+			var list = [];
+
+			var node = reversedList;
+
+			while (node._prev) {
+				list.push({
+					result: node._result,
+					error: node._error,
+					cancel: node._cancel
+				});
+
+				node = node._prev;
+			}
+
+			return {
+				list: list,
+				data: node._data
+			};
+		}
+
+		return {
+			prependReversedList: function prependReversedList(reversedList) {
+				var direct = reversedToListAndData(reversedList);
+
+				lists.unshift(direct.list);
+
+				return direct.data;
+			},
+
+			takeLayer: function takeLayer() {
+				while (lists.length) {
+					var list = lists[0];
+
+					while (list.length) {
+						return list.pop();
+					}
+
+					lists.shift();
+				}
+
+				return null;
+			},
+			takeLayerWithCancelAndDropPrepended: function takeLayerWithCancelAndDropPrepended() {
+				while (lists.length) {
+					var list = lists[0];
+
+					while (list.length) {
+						var layer = list.pop();
+
+						if (layer.cancel) {
+							lists.shift();
+
+							return layer;
+						}
+					}
+
+					lists.shift();
+				}
+
+				return null;
+			},
+
+			getData: function getData() {
+				return data;
+			}
+		};
+	};
+}
+
+/***/ }),
+/* 2 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+module.exports = AsyncM;
+
+__webpack_require__(0)(AsyncM);
+
+if (typeof window !== 'undefined') {
+	window.AsyncM = AsyncM;
+}
+
+var ReversedFlowList = __webpack_require__(1);
+
+function AsyncM(options) {
+	var reversedFlowList = options.reversedFlowList;
+
+	this._reversedFlowList = reversedFlowList;
+
+	this.next = function (resultHandler, errorHandler, cancelHandler) {
+		return new AsyncM({
+			reversedFlowList: reversedFlowList.addLayer(resultHandler, errorHandler, cancelHandler)
+		});
+	};
+
+	this.run = function (onResult, onError, onCancel) {
+		var directFlowList = reversedFlowList.toDirectList();
+
+		var mRunner = directFlowList.getData();
+
+		var executionCounter = 0,
+		    cancelledAtCounter = null,
+		    cancelCallback = null;
+
+		var running, hasFakeRunning;
+
+		var runningSync, runnedSync;
+
+		while (true) {
+			runningSync = true;
+			runnedSync = false;
+
+			doRun();
+
+			runningSync = false;
+
+			if (!runnedSync) break;
+		}
+
+		function doRun(m) {
+			hasFakeRunning = false;
+
+			var runningFinishedSync = false;
+
+			running = mRunner(nextHandling(executionCounter, 'result', onResult), nextHandling(executionCounter, 'error', onError));
+
+			if (runningFinishedSync) {
+				running = null;
+
+				return;
+			}
+
+			if (!running || !running.cancel) {
+				hasFakeRunning = true;
+
+				var fakeRunning = {
+					cancel: AsyncM.fun(function (onResult, onError, data) {
+						if (cancelledAtCounter !== null) {
+							onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
+							return;
+						}
+
+						if (!running) {
+							onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+							return;
+						}
+
+						cancelledAtCounter = executionCounter;
+						cancelCallback = function cancelCallback() {
+							cancelHandling(data, null, null, onResult, onError);
+						};
+					})
+				};
+
+				running = fakeRunning;
+			}
+
+			function nextHandling(execCounter, layerName, finalHandler) {
+				return function (data) {
+					// Ignore second-time run
+					if (executionCounter !== execCounter) return;
+
+					executionCounter++;
+
+					if (cancelledAtCounter === execCounter) {
+						cancelCallback();
+						return;
+					}
+
+					// Ignore... what?
+					if (cancelledAtCounter !== null) return;
+
+					while (true) {
+						var layer = directFlowList.takeLayer();
+
+						if (!layer) break;
+
+						if (!layer[layerName]) continue;
+
+						var _m = layer[layerName](data);
+
+						if (!_m) continue;
+
+						if (!(_m instanceof AsyncM)) {
+							data = _m;
+							continue;
+						}
+
+						if (_m.__pureMF) _m = _m.__pureMF();
+
+						mRunner = directFlowList.prependReversedList(_m._reversedFlowList);
+
+						if (runningSync) {
+							runnedSync = true;
+						} else {
+							doRun();
+						}
+
+						return;
+					}
+
+					running = null;
+
+					runningFinishedSync = true;
+
+					if (finalHandler) finalHandler(data);
+				};
+			}
+		}
+
+		// TODO: must return a monad to be cancellable
+		// But anyway, `onCancel` must be called even if cancel is cancelled
+		function cancelHandling(originalData, errorData, resultData, onResult, onError) {
+			var cancelChainM = errorData ? AsyncM.error(errorData) : AsyncM.result(resultData);
+
+			cancelChainM.next(resultCancelHandler, errorCancelHandler).run(function (result) {
+				if (onCancel) onCancel(originalData, null, result);
+				onResult(result);
+			}, function (error) {
+				if (onCancel) onCancel(originalData, error);
+				onError(error);
+			});
+
+			function resultCancelHandler(result) {
+				var cancelHandler = takeCancelHandler();
+
+				if (!cancelHandler) {
+					return;
+				}
+
+				var m = cancelHandler(originalData, null, result);
+
+				if (!(m instanceof AsyncM)) m = AsyncM.result(m || result);
+
+				return m.next(resultCancelHandler, errorCancelHandler);
+			}
+			function errorCancelHandler(error) {
+				var cancelHandler = takeCancelHandler();
+
+				if (!cancelHandler) {
+					return;
+				}
+
+				var m = cancelHandler(originalData, error);
+
+				if (!(m instanceof AsyncM)) m = m ? AsyncM.result(m) : AsyncM.error(error);
+
+				return m.next(resultCancelHandler, errorCancelHandler);
+			}
+
+			function takeCancelHandler() {
+				while (true) {
+					var layer = directFlowList.takeLayerWithCancelAndDropPrepended();
+
+					if (!layer) return null;
+
+					if (!layer.cancel) continue;
+
+					return layer.cancel;
+				}
+			}
+		}
+
+		return {
+			cancel: AsyncM.fun(function (onResult, onError, data) {
+				if (!running) {
+					onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+					return;
+				}
+
+				if (!hasFakeRunning) {
+					if (cancelledAtCounter !== null) {
+						onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
+						return;
+					}
+				}
+
+				// Ignore results of function calls
+				cancelledAtCounter = executionCounter;
+				cancelCallback = function cancelCallback() {};
+
+				var cancelWaiters = [],
+				    finished = false;
+
+				var oldRunning = running;
+				running = null;
+
+				var cancelRunning = oldRunning.cancel(data).run(function (result) {
+					cancelHandling(data, null, result, cancelFinishHandling(onResult), cancelFinishHandling(onError));
+				}, function (error) {
+					cancelHandling(data, error, null, cancelFinishHandling(onResult), cancelFinishHandling(onError));
+				});
+
+				if (finished) {
+					cancelRunning = null;
+				}
+
+				function cancelFinishHandling(cont) {
+					return function (data) {
+						finished = true;
+
+						cancelRunning = null;
+
+						cancelWaiters.forEach(function (f) {
+							f(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+						});
+
+						cancelWaiters = null;
+
+						cont(data);
+					};
+				}
+
+				return {
+					cancel: AsyncM.fun(function (onResult, onError, data) {
+						if (finished) {
+							onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+							return;
+						}
+
+						cancelWaiters.push(onError);
+					})
+				};
+			})
+		};
+	};
+}
+
+AsyncM.CANCEL_ERROR = {
+	ALREADY_FINISHED: 'already_finished',
+	ALREADY_CANCELLED: 'already_cancelled'
+};
+
+AsyncM.create = function (runner) {
+	return new AsyncM({
+		reversedFlowList: new ReversedFlowList({
+			data: runner
+		})
+	});
+};
+
+AsyncM.result = function (result) {
+	return AsyncM.create(function (onResult) {
+		onResult(result);
+	});
+};
+AsyncM.error = function (error) {
+	return AsyncM.create(function (onResult, onError) {
+		onError(error);
+	});
+};
+
+AsyncM.pureM = function (f) {
+	var m = AsyncM.create(function (onResult, onError) {
+		return f().run(onResult, onError);
+	});
+
+	m.__pureMF = f;
+
+	return m;
+};
+
+/***/ })
+/******/ ]);
