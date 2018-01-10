@@ -13,7 +13,7 @@ AsyncM.prototype.cancel = function(cancelHandler) {
 };
 
 AsyncM.prototype.any = function(handler, cancelHandler) {
-	return this.next(resultHandler, handler, cancelHandler || null);
+	return this.next(handler, handler, cancelHandler || null);
 };
 
 AsyncM.prototype.skipAny = function(m) {
