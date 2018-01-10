@@ -12,6 +12,10 @@ AsyncM.prototype.cancel = function(cancelHandler) {
 	return this.next(null, null, cancelHandler);
 };
 
+AsyncM.prototype.any = function(handler, cancelHandler) {
+	return this.next(resultHandler, handler, cancelHandler || null);
+};
+
 AsyncM.prototype.skipAny = function(m) {
 	return this.next(function() {
 		return m;
@@ -117,7 +121,7 @@ AsyncM.parallel = function(ms, options) {
 				results_left--;
 
 				if (results_left === 0) {
-					onResult(results);
+					if (drop) onResult(); else onResult(results);
 				}
 			}, function(error) {
 				if (finished) return;
