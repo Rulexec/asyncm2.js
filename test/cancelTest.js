@@ -294,4 +294,27 @@ describe('M', function() {
 			});
 		});
 	});
+
+	describe('empty cancel', function() {
+		it('should finish without error after result', function(done) {
+			var finished = false;
+
+			var m = M.create(function(onResult) {
+				setTimeout(function() {
+					finished = true;
+					onResult();
+				}, 200);
+			});
+
+			var running = m.run();
+
+			running.cancel().run(function() {
+				assert(finished, 'setTimeout is not finished');
+
+				done();
+			}, function(error) {
+				assert(false, error);
+			});
+		});
+	});
 });

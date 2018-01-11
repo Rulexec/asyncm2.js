@@ -13,7 +13,7 @@ AsyncM.prototype.cancel = function(cancelHandler) {
 };
 
 AsyncM.prototype.any = function(handler, cancelHandler) {
-	return this.next(handler, handler, cancelHandler || null);
+	return this.next(function(result) { return handler.call(this, null, result); }, handler, cancelHandler || null);
 };
 
 AsyncM.prototype.skipAny = function(m) {
@@ -95,12 +95,22 @@ AsyncM.fun = function(f) {
 
 AsyncM.parallel = function(ms, options) {
 	var f = options && options.f,
-	    drop = options && options.drop;
+	    drop = options && options.drop,
+	    waitAll = options && options.waitAll;
 
 	return AsyncM.create(function(onResult, onError) {
-		var results = !drop && [];
+		var results = !drop && [],
+		    errors = waitAll && {},
+		    errorHappened = false;
 
-		var results_left = ms.length;
+		var resultsLeft = ms.length;
+
+		if (!resultsLeft) {
+			if (drop) onResult();
+			else onResult([]);
+		}
+
+		var allFinished = false;
 
 		ms.forEach(function(x, i) {
 			var m;
@@ -113,21 +123,32 @@ AsyncM.parallel = function(ms, options) {
 			var finished = false;
 
 			m.run(function(result) {
-				if (finished) return;
+				if (finished || allFinished) return;
 				finished = true;
 
 				if (!drop) results[i] = result;
 
-				results_left--;
+				resultsLeft--;
 
-				if (results_left === 0) {
-					if (drop) onResult(); else onResult(results);
+				if (resultsLeft === 0) {
+					if (waitAll && errorHappened) onError(errors);
+					else if (drop) onResult(); else onResult(results);
 				}
 			}, function(error) {
-				if (finished) return;
+				if (finished || allFinished) return;
 				finished = true;
 
-				onError(error);
+				if (waitAll) {
+					errors[i] = error;
+					errorHappened = true;
+
+					resultsLeft--;
+
+					if (resultsLeft === 0) onError(errors);
+				} else {
+					allFinished = true;
+					onError(error);
+				}
 			});
 		});
 	});

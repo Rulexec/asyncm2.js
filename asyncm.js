@@ -66,24 +66,7 @@ function AsyncM(options) {
 			if (!running || !running.cancel) {
 				hasFakeRunning = true;
 
-				let fakeRunning = {
-					cancel: AsyncM.fun(function(onResult, onError, data) {
-						if (cancelledAtCounter !== null) {
-							onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
-							return;
-						}
-
-						if (!running) {
-							onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
-							return;
-						}
-
-						cancelledAtCounter = executionCounter;
-						cancelCallback = function() {
-							cancelHandling(data, null, null, onResult, onError);
-						};
-					})
-				};
+				let fakeRunning = {};
 
 				running = fakeRunning;
 			}
@@ -202,34 +185,41 @@ function AsyncM(options) {
 					return;
 				}
 
-				if (!hasFakeRunning) {
-					if (cancelledAtCounter !== null) {
-						onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
-						return;
-					}
+				if (cancelledAtCounter !== null) {
+					onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
+					return;
 				}
 
-				// Ignore results of function calls
-				cancelledAtCounter = executionCounter;
-				cancelCallback = function() {};
-
-				var cancelWaiters = [],
+				let cancelWaiters = [],
 				    finished = false;
 
-				var oldRunning = running;
-				running = null;
+				let cancelRunning = null;
 
-				var cancelRunning = oldRunning.cancel(data).run(
-					function(result) {
-						cancelHandling(data, null, result, cancelFinishHandling(onResult), cancelFinishHandling(onError));
-					},
-					function(error) {
-						cancelHandling(data, error, null, cancelFinishHandling(onResult), cancelFinishHandling(onError));
+				if (!hasFakeRunning) {
+					// Ignore results of function calls
+					cancelledAtCounter = executionCounter;
+					cancelCallback = function() {};
+
+					let oldRunning = running;
+					running = null;
+
+					cancelRunning = oldRunning.cancel(data).run(
+						function(result) {
+							cancelHandling(data, null, result, cancelFinishHandling(onResult), cancelFinishHandling(onError));
+						},
+						function(error) {
+							cancelHandling(data, error, null, cancelFinishHandling(onResult), cancelFinishHandling(onError));
+						}
+					);
+
+					if (finished) {
+						cancelRunning = null;
 					}
-				);
-
-				if (finished) {
-					cancelRunning = null;
+				} else {
+					cancelledAtCounter = executionCounter;
+					cancelCallback = function() {
+						cancelHandling(data, null, null, cancelFinishHandling(onResult), cancelFinishHandling(onError));
+					};
 				}
 
 				function cancelFinishHandling(cont) {
