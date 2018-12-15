@@ -96,6 +96,7 @@ AsyncM.fun = function(f) {
 AsyncM.parallel = function(ms, options) {
 	var f = options && options.f,
 	    drop = options && options.drop,
+	    limit = options && options.limit || 0,
 	    waitAll = options && options.waitAll;
 
 	return AsyncM.create(function(onResult, onError) {
@@ -112,7 +113,19 @@ AsyncM.parallel = function(ms, options) {
 
 		var allFinished = false;
 
-		ms.forEach(function(x, i) {
+		let runningIndex;
+
+		if (limit) {
+			let count = Math.min(resultsLeft, limit);
+
+			runningIndex = count;
+
+			for (let i = 0; i < count; i++) executeSingle(ms[i], i);
+		} else {
+			ms.forEach((x, i) => { executeSingle(x, i); });
+		}
+
+		function executeSingle(x, i) {
 			var m;
 
 			if (f) m = f(x, i);
@@ -133,6 +146,11 @@ AsyncM.parallel = function(ms, options) {
 				if (resultsLeft === 0) {
 					if (waitAll && errorHappened) onError(errors);
 					else if (drop) onResult(); else onResult(results);
+				} else if (limit && runningIndex < ms.length) {
+					let i = runningIndex;
+					runningIndex++;
+
+					executeSingle(ms[i], i);
 				}
 			}, function(error) {
 				if (finished || allFinished) return;
@@ -144,13 +162,20 @@ AsyncM.parallel = function(ms, options) {
 
 					resultsLeft--;
 
-					if (resultsLeft === 0) onError(errors);
+					if (resultsLeft === 0) {
+						onError(errors);
+					} else if (limit && runningIndex < ms.length) {
+						let i = runningIndex;
+						runningIndex++;
+
+						executeSingle(ms[i], i);
+					}
 				} else {
 					allFinished = true;
 					onError(error);
 				}
 			});
-		});
+		}
 	});
 };
 
