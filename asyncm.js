@@ -93,7 +93,18 @@ function AsyncM(options) {
 
 						if (!layer[layerName]) continue;
 
-						let m = layer[layerName](data);
+						let contResultData;
+
+						let m = layer[layerName].call({
+							contResult: function(newData) {
+								contResultData = newData;
+							}
+						}, data);
+
+						if (contResultData) {
+							// TODO
+							m = AsyncM.result(contResultData);
+						}
 
 						if (!m) continue;
 

@@ -64,7 +64,9 @@ function ReversedFlowList(options) {
 			prependReversedList: function(reversedList) {
 				let direct = reversedToListAndData(reversedList);
 
-				lists.unshift(direct.list);
+				if (direct.list.length) {
+					lists.unshift(direct.list);
+				}
 
 				return direct.data;
 			},
@@ -73,8 +75,14 @@ function ReversedFlowList(options) {
 				while (lists.length) {
 					let list = lists[0];
 
-					while (list.length) {
-						return list.pop();
+					if (list.length) {
+						let item = list.pop();
+
+						if (!list.length) {
+							lists.shift();
+						}
+
+						return item;
 					}
 
 					lists.shift();
