@@ -77,6 +77,63 @@ AsyncM.sleep = function(t) {
 	});
 };
 
+AsyncM.immediate = function() {
+	return AsyncM.create(function(onResult) {
+		var finished = false;
+
+		var timeoutId = setImmediate(function() {
+			finished = true;
+
+			onResult();
+		});
+
+		return {
+			cancel: function(data) {
+				return AsyncM.create(function(onResult, onError) {
+					if (timeoutId === null) {
+						onError(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
+						return;
+					}
+
+					if (finished) {
+						onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+						return;
+					}
+
+					clearTimeout(timeoutId);
+
+					timeoutId = null;
+
+					onResult(data);
+				});
+			}
+		};
+	});
+};
+
+AsyncM.Blocker = Blocker;
+function Blocker(isBlocked, name) {
+	let unblockWaiters = [];
+
+	let m = AsyncM.create(onResult => {
+		if (!isBlocked) onResult();
+		else unblockWaiters.push(onResult);
+	});
+
+	this.get = () => m;
+
+	this.toggle = function(toggle) {
+		if (!!isBlocked === !!toggle) return;
+
+		isBlocked = toggle;
+
+		if (!isBlocked) {
+			let count = unblockWaiters.length;
+			for (let i = 0; i < count; i++) unblockWaiters.shift()();
+		}
+	};
+}
+
 AsyncM.never = function() {
 	return AsyncM.create(function(){
 		return {cancel: function() { return AsyncM.result(); }};
@@ -178,5 +235,56 @@ AsyncM.parallel = function(ms, options) {
 		}
 	});
 };
+
+AsyncM.ParallelPool = ParallelPool;
+function ParallelPool(options) {
+	let { size } = options;
+
+	let runningCount = 0;
+	let queue = [];
+	let emptyWaiters = [];
+
+	function onExecutionFinished() {
+		runningCount--;
+
+		if (queue.length) {
+			queue.shift()()
+		} else if (!runningCount) {
+			emptyWaiters.forEach(fun => { fun(); });
+		}
+	}
+
+	this.schedule = function(m) {
+		return AsyncM.create(onResult => {
+			run();
+
+			function run() {
+				if (runningCount >= size) {
+					queue.push(run);
+					return;
+				}
+
+				runningCount++;
+
+				onResult();
+
+				m.run(() => {
+					onExecutionFinished();
+				}, () => {
+					onExecutionFinished();
+				});
+			}
+		});
+	};
+
+	this.onEmpty = function() { return AsyncM.create(onResult => {
+		checkEmpty();
+
+		function checkEmpty() {
+			if (runningCount) emptyWaiters.push(checkEmpty);
+			else onResult();
+		}
+	}); };
+}
 
 }
