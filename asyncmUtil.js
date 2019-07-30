@@ -2,6 +2,9 @@ module.exports = inject;
 
 function inject(AsyncM) {
 
+function AsyncMEmptyError() {}
+let emptyError = new AsyncMEmptyError();
+
 AsyncM.prototype.result = function(resultHandler) {
 	return this.next(resultHandler, null, null);
 };
@@ -14,6 +17,26 @@ AsyncM.prototype.cancel = function(cancelHandler) {
 
 AsyncM.prototype.any = function(handler, cancelHandler) {
 	return this.next(function(result) { return handler.call(this, null, result); }, handler, cancelHandler || null);
+};
+
+AsyncM.prototype.skipFinallyAndPassSeq = function(seq) {
+	let m = this;
+
+	seq.forEach(ms => {
+		m = m.next(
+			result => {
+				return ms.any(() => AsyncM.result(result));
+			},
+			(value, opts) => {
+				return ms.any(() => AsyncM._error(value, opts));
+			},
+			value => {
+				return ms.any(() => AsyncM.result(value));
+			}
+		);
+	});
+
+	return m;
 };
 
 AsyncM.prototype.skipAny = function(m) {
@@ -32,13 +55,29 @@ AsyncM.prototype.skipError = function(m) {
 	return this.error(function() { return m; });
 };
 
+AsyncM.prototype.skipResultSeq = function(seq) {
+	let m = this;
+
+	seq.forEach(mr => {
+		m = m.skipResult(mr);
+	});
+
+	return m;
+};
+
 AsyncM.pureF = function(f) {
+	let errorException = new Error('pureF must return AsyncM object');
+
 	return function() {
 		var that = this,
 		    args = arguments;
 
 		return AsyncM.pureM(function() {
-			return f.apply(that, args)
+			let m = f.apply(that, args);
+
+			if (!m) return AsyncM.error(errorException);
+
+			return m;
 		});
 	};
 };
@@ -112,15 +151,31 @@ AsyncM.immediate = function() {
 };
 
 AsyncM.Blocker = Blocker;
-function Blocker(isBlocked, name) {
+function Blocker(isBlocked) {
 	let unblockWaiters = [];
 
 	let m = AsyncM.create(onResult => {
 		if (!isBlocked) onResult();
-		else unblockWaiters.push(onResult);
+		else unblockWaiters.push(() => { onResult(); });
+	});
+
+	let mb = AsyncM.create(onResult => {
+		if (isBlocked) {
+			unblockWaiters.push(() => {
+				isBlocked = true;
+
+				onResult();
+			});
+			return;
+		}
+
+		isBlocked = true;
+
+		onResult();
 	});
 
 	this.get = () => m;
+	this.getAndBlock = () => mb;
 
 	this.toggle = function(toggle) {
 		if (!!isBlocked === !!toggle) return;
@@ -129,7 +184,10 @@ function Blocker(isBlocked, name) {
 
 		if (!isBlocked) {
 			let count = unblockWaiters.length;
-			for (let i = 0; i < count; i++) unblockWaiters.shift()();
+			for (let i = 0; i < count; i++) {
+				unblockWaiters.shift()();
+				if (isBlocked) break;
+			}
 		}
 	};
 }
@@ -151,17 +209,29 @@ AsyncM.fun = function(f) {
 };
 
 AsyncM.parallel = function(ms, options) {
-	var f = options && options.f,
-	    drop = options && options.drop,
-	    limit = options && options.limit || 0,
-	    waitAll = options && options.waitAll;
+	if (!Array.isArray(ms)) {
+		options = ms;
+		ms = null;
+	}
+
+	let {
+		f,
+		drop,
+		limit,
+		waitAll,
+		count,
+	} = options || {};
+
+	if (typeof limit !== 'number') limit = 0;
+	if (!ms && (typeof count !== 'number')) return AsyncM.error(new Error('not array, no count'));
 
 	return AsyncM.create(function(onResult, onError) {
 		var results = !drop && [],
 		    errors = waitAll && {},
 		    errorHappened = false;
 
-		var resultsLeft = ms.length;
+		var resultsLeft = ms ? ms.length : count;
+		let totalCount = resultsLeft;
 
 		if (!resultsLeft) {
 			if (drop) onResult();
@@ -170,70 +240,168 @@ AsyncM.parallel = function(ms, options) {
 
 		var allFinished = false;
 
+		let cancelled = false;
+		let runningSet = new Set();
+
 		let runningIndex;
 
-		if (limit) {
-			let count = Math.min(resultsLeft, limit);
+		if (ms) {
+			if (limit) {
+				let count = Math.min(resultsLeft, limit);
 
-			runningIndex = count;
+				runningIndex = count;
 
-			for (let i = 0; i < count; i++) executeSingle(ms[i], i);
+				for (let i = 0; i < count; i++) executeSingle(ms[i], i);
+			} else {
+				ms.forEach((x, i) => { executeSingle(x, i); });
+			}
 		} else {
-			ms.forEach((x, i) => { executeSingle(x, i); });
+			if (limit) {
+				let c = Math.min(resultsLeft, limit);
+
+				runningIndex = c;
+
+				for (let i = 0; i < c; i++) executeSingle(i, i);
+			} else {
+				for (let i = 0; i < count; i++) executeSingle(i, i);
+			}
 		}
 
+		return {
+			cancel: AsyncM.pureF(data => {
+				if (!resultsLeft) return AsyncM.error(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
+				if (cancelled) return AsyncM.error(AsyncM.CANCEL_ERROR.ALREADY_CANCELLED);
+
+				allFinished = true;
+				cancelled = true;
+
+				let runnings = Array.from(runningSet);
+				runningSet = null;
+
+				return AsyncM.parallel(runnings, {
+					drop: true,
+					f: running => running.cancel(),
+				});
+			}),
+		};
+
 		function executeSingle(x, i) {
-			var m;
+			let isSync = true;
 
-			if (f) m = f(x, i);
-			else m = x;
+			while (true) {
+				if (cancelled) return;
 
-			if (!drop) results.push(null);
+				var m;
 
-			var finished = false;
+				if (f) m = f(x, i);
+				else m = x;
 
-			m.run(function(result) {
-				if (finished || allFinished) return;
-				finished = true;
+				if (!drop) results.push(null);
 
-				if (!drop) results[i] = result;
+				var finished = false;
 
-				resultsLeft--;
+				let running;
+				running = m.run(function(result) {
+					if (finished || allFinished) return;
+					finished = true;
 
-				if (resultsLeft === 0) {
-					if (waitAll && errorHappened) onError(errors);
-					else if (drop) onResult(); else onResult(results);
-				} else if (limit && runningIndex < ms.length) {
-					let i = runningIndex;
-					runningIndex++;
+					if (running) runningSet.delete(running);
 
-					executeSingle(ms[i], i);
-				}
-			}, function(error) {
-				if (finished || allFinished) return;
-				finished = true;
-
-				if (waitAll) {
-					errors[i] = error;
-					errorHappened = true;
+					if (!drop) results[i] = result;
 
 					resultsLeft--;
 
 					if (resultsLeft === 0) {
-						onError(errors);
-					} else if (limit && runningIndex < ms.length) {
+						if (waitAll && errorHappened) onError(errors);
+						else if (drop) onResult(); else onResult(results);
+					} else if (limit && runningIndex < totalCount) {
 						let i = runningIndex;
 						runningIndex++;
 
-						executeSingle(ms[i], i);
+						if (ms) {
+							requestExecuteSingle(ms[i], i);
+						} else {
+							requestExecuteSingle(i, i);
+						}
 					}
-				} else {
-					allFinished = true;
-					onError(error);
+				}, function(error) {
+					if (finished || allFinished) return;
+					finished = true;
+
+					if (running) runningSet.delete(running);
+
+					if (waitAll) {
+						errors[i] = error;
+						errorHappened = true;
+
+						resultsLeft--;
+
+						if (resultsLeft === 0) {
+							onError(errors);
+						} else if (limit && runningIndex < totalCount) {
+							let i = runningIndex;
+							runningIndex++;
+
+							if (ms) {
+								requestExecuteSingle(ms[i], i);
+							} else {
+								requestExecuteSingle(i, i);
+							}
+						}
+					} else {
+						allFinished = true;
+						onError(error);
+					}
+				});
+
+				if (!finished) {
+					runningSet.add(running);
 				}
-			});
+
+				if (isSync) {
+					isSync = false;
+					return;
+				}
+
+				isSync = true;
+			}
+
+			function requestExecuteSingle(rx, ri) {
+				if (isSync) {
+					isSync = false;
+					x = rx;
+					i = ri;
+				} else {
+					executeSingle(rx, ri);
+				}
+			}
 		}
 	});
+};
+
+AsyncM.race = race;
+function race(ms /*, options*/) {
+	let finished = false;
+
+	let result = new AsyncM.Defer();
+
+	AsyncM.parallel(ms, {
+		drop: true,
+
+		f(m) {
+			return m.result(data => {
+				if (finished) return;
+				finished = true;
+				result.result(data);
+			});
+		},
+	}).run(null, error => {
+		if (finished) return;
+		finished = true;
+		result.error(error);
+	});
+
+	return result.get();
 };
 
 AsyncM.ParallelPool = ParallelPool;
@@ -286,5 +454,93 @@ function ParallelPool(options) {
 		}
 	}); };
 }
+
+AsyncM.Defer = Defer;
+function Defer() {
+	let isError = false;
+	let error, result;
+
+	let waiters = [];
+
+	let m = AsyncM.create((onResult, onError) => {
+		if (waiters) waiters.push({ onResult, onError });
+		else if (isError) onError(error);
+		else onResult(result);
+	});
+
+	this.get = () => m;
+
+	this.result = function(value) {
+		if (!waiters) return;
+
+		isError = false;
+		result = value;
+
+		if (waiters) {
+			let oldWaiters = waiters;
+			waiters = null;
+
+			oldWaiters.forEach(({ onResult }) => { onResult(value); });
+		}
+	};
+	this.error = function(value) {
+		if (!waiters) return;
+
+		isError = true;
+		error = value;
+
+		if (waiters) {
+			let oldWaiters = waiters;
+			waiters = null;
+
+			oldWaiters.forEach(({ onError }) => { onError(value); });
+		}
+	};
+
+	this.reset = function() {
+		waiters = [];
+	};
+}
+
+AsyncM.Cancellable = Cancellable;
+function Cancellable(originalM) {
+	let needCancel = false;
+
+	let running;
+	let errorCallback;
+
+	let m = AsyncM.create((onResult, onError) => {
+		if (needCancel) { onError(Cancellable.CANCELLED); return; }
+
+		running = originalM.run(onResult, onError);
+		errorCallback = onError;
+
+		return {
+			cancel() {
+				return running.cancel.apply(this, arguments);
+			},
+		};
+	});
+
+	this.get = () => m;
+
+	this.cancel = AsyncM.pureF(arg => {
+		if (needCancel) return AsyncM.result();
+
+		needCancel = true;
+
+		if (errorCallback) errorCallback(Cancellable.CANCELLED);
+		if (running) return running.cancel(arg);
+
+		return AsyncM.result();
+	});
+}
+Cancellable.CANCELLED = { type: 'cancelled' };
+
+AsyncM.prototype.runAsPromise = function() {
+	return new Promise((resolve, reject) => {
+		this.run(resolve, reject);
+	});
+};
 
 }

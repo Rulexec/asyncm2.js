@@ -4,6 +4,8 @@ var assert = require('assert'),
     testUtil = require('./util'),
 		util = require('util');
 
+const AsyncM = M;
+
 describe('M', function() {
 	var resultTwo = M.result(2),
 	    errorTwo = M.error(2);

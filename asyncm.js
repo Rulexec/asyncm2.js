@@ -72,7 +72,7 @@ function AsyncM(options) {
 			}
 
 			function nextHandling(execCounter, layerName, finalHandler) {
-				return function(data) {
+				return function(data, dataOpts) {
 					// Ignore second-time run
 					if (executionCounter !== execCounter) return;
 
@@ -95,18 +95,24 @@ function AsyncM(options) {
 
 						let contResultData;
 
-						let m = layer[layerName].call({
-							contResult: function(newData) {
-								contResultData = newData;
-							}
-						}, data);
+						let m;
+
+						try {
+							m = layer[layerName].call({
+								contResult: function(newData) {
+									contResultData = newData;
+								}
+							}, data, dataOpts);
+						} catch (e) {
+							m = AsyncM.error(e);
+						}
 
 						if (contResultData) {
 							// TODO
 							m = AsyncM.result(contResultData);
 						}
 
-						if (!m) continue;
+						if (typeof m === 'undefined') continue;
 
 						if (!(m instanceof AsyncM)) {
 							data = m;
@@ -130,7 +136,7 @@ function AsyncM(options) {
 
 					runningFinishedSync = true;
 
-					if (finalHandler) finalHandler(data);
+					if (finalHandler) finalHandler(data, dataOpts);
 				};
 			}
 		}
@@ -144,9 +150,9 @@ function AsyncM(options) {
 			).run(function(result) {
 				if (onCancel) onCancel(originalData, null, result);
 				onResult(result);
-			}, function(error) {
+			}, function(error, errorOpts) {
 				if (onCancel) onCancel(originalData, error);
-				onError(error);
+				onError(error, errorOpts);
 			});
 
 			function resultCancelHandler(result) {
@@ -281,7 +287,11 @@ AsyncM.result = function(result) {
 	return AsyncM.create(function(onResult) { onResult(result); });
 };
 AsyncM.error = function(error) {
-	return AsyncM.create(function(onResult, onError) { onError(error); });
+	let errorException = (error instanceof Error) ? error : new Error();
+	return AsyncM.create(function(onResult, onError) { onError(error, { exception: errorException }); });
+};
+AsyncM._error = function(error, opts) {
+	return AsyncM.create(function(onResult, onError) { onError(error, opts); });
 };
 
 AsyncM.pureM = function(f) {
