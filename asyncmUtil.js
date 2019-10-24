@@ -19,21 +19,25 @@ AsyncM.prototype.any = function(handler, cancelHandler) {
 	return this.next(function(result) { return handler.call(this, null, result); }, handler, cancelHandler || null);
 };
 
+AsyncM.prototype.finally = function(m) {
+	return this.next(
+		result => {
+			return m.any(() => AsyncM.result(result));
+		},
+		(value, opts) => {
+			return m.any(() => AsyncM._error(value, opts));
+		},
+		value => {
+			return m.any(() => AsyncM.result(value));
+		}
+	);
+};
+
 AsyncM.prototype.skipFinallyAndPassSeq = function(seq) {
 	let m = this;
 
 	seq.forEach(ms => {
-		m = m.next(
-			result => {
-				return ms.any(() => AsyncM.result(result));
-			},
-			(value, opts) => {
-				return ms.any(() => AsyncM._error(value, opts));
-			},
-			value => {
-				return ms.any(() => AsyncM.result(value));
-			}
-		);
+		m = m.finally(ms);
 	});
 
 	return m;
@@ -177,18 +181,22 @@ function Blocker(isBlocked) {
 	this.get = () => m;
 	this.getAndBlock = () => mb;
 
+	let looping = false;
+
 	this.toggle = function(toggle) {
 		if (!!isBlocked === !!toggle) return;
 
 		isBlocked = toggle;
 
-		if (!isBlocked) {
-			let count = unblockWaiters.length;
-			for (let i = 0; i < count; i++) {
-				unblockWaiters.shift()();
-				if (isBlocked) break;
-			}
+		if (looping) return;
+
+		looping = true;
+
+		while (!isBlocked && unblockWaiters.length) {
+			unblockWaiters.shift()();
 		}
+
+		looping = false;
 	};
 }
 
@@ -380,37 +388,58 @@ AsyncM.parallel = function(ms, options) {
 };
 
 AsyncM.race = race;
-function race(ms /*, options*/) {
+function race(ms, options) {
+	let { cancelRest } = options || {};
+
 	let finished = false;
 
 	let result = new AsyncM.Defer();
 
-	AsyncM.parallel(ms, {
+	let running;
+	running = AsyncM.parallel(ms, {
 		drop: true,
 
 		f(m) {
 			return m.result(data => {
 				if (finished) return;
 				finished = true;
+
 				result.result(data);
+
+				onSomeFinished();
 			});
 		},
 	}).run(null, error => {
 		if (finished) return;
 		finished = true;
+
 		result.error(error);
+
+		onSomeFinished();
 	});
 
+	if (finished) onSomeFinished();
+
 	return result.get();
+
+	function onSomeFinished() {
+		if (!cancelRest) return;
+		if (!running) return;
+
+		cancelRest = false;
+
+		running.cancel().run();
+	}
 };
 
 AsyncM.ParallelPool = ParallelPool;
 function ParallelPool(options) {
-	let { size } = options;
+	let { size } = options || {};
 
 	let runningCount = 0;
 	let queue = [];
 	let emptyWaiters = [];
+	let emptyOrErrorDefer = null;
 
 	function onExecutionFinished() {
 		runningCount--;
@@ -419,6 +448,12 @@ function ParallelPool(options) {
 			queue.shift()()
 		} else if (!runningCount) {
 			emptyWaiters.forEach(fun => { fun(); });
+
+			if (emptyOrErrorDefer) {
+				let oldDefer = emptyOrErrorDefer;
+				emptyOrErrorDefer = null;
+				oldDefer.result();
+			}
 		}
 	}
 
@@ -427,7 +462,7 @@ function ParallelPool(options) {
 			run();
 
 			function run() {
-				if (runningCount >= size) {
+				if (size && runningCount >= size) {
 					queue.push(run);
 					return;
 				}
@@ -438,11 +473,20 @@ function ParallelPool(options) {
 
 				m.run(() => {
 					onExecutionFinished();
-				}, () => {
+				}, (error, errorData) => {
+					if (emptyOrErrorDefer) {
+						let oldDefer = emptyOrErrorDefer;
+						emptyOrErrorDefer = null;
+						oldDefer.error(error, errorData);
+					}
+
 					onExecutionFinished();
 				});
 			}
 		});
+	};
+	this.scheduleAndRun = function(m) {
+		this.schedule(m).run();
 	};
 
 	this.onEmpty = function() { return AsyncM.create(onResult => {
@@ -453,6 +497,16 @@ function ParallelPool(options) {
 			else onResult();
 		}
 	}); };
+
+	this.onEmptyOrError = function() {
+		if (!runningCount) return AsyncM.result();
+
+		if (!emptyOrErrorDefer) {
+			emptyOrErrorDefer = new AsyncM.Defer();
+		}
+
+		return emptyOrErrorDefer.get();
+	};
 }
 
 AsyncM.Defer = Defer;
@@ -476,29 +530,27 @@ function Defer() {
 		isError = false;
 		result = value;
 
-		if (waiters) {
-			let oldWaiters = waiters;
-			waiters = null;
+		let oldWaiters = waiters;
+		waiters = null;
 
-			oldWaiters.forEach(({ onResult }) => { onResult(value); });
-		}
+		oldWaiters.forEach(({ onResult }) => { onResult(value); });
 	};
-	this.error = function(value) {
+	this.error = function(value, errorData) {
 		if (!waiters) return;
 
 		isError = true;
 		error = value;
 
-		if (waiters) {
-			let oldWaiters = waiters;
-			waiters = null;
+		let oldWaiters = waiters;
+		waiters = null;
 
-			oldWaiters.forEach(({ onError }) => { onError(value); });
-		}
+		oldWaiters.forEach(({ onError }) => { onError(value, errorData); });
 	};
 
 	this.reset = function() {
+		let oldWaiters = waiters;
 		waiters = [];
+		oldWaiters.forEach(({ onError }) => { onError(new Error('was reset')); });
 	};
 }
 

@@ -6,10 +6,16 @@ if (typeof window !== 'undefined') {
 	window.AsyncM = AsyncM;
 }
 
+AsyncM.CAUSE = Symbol('cause');
+
 var ReversedFlowList = require('./flow-list');
 
 function AsyncM(options) {
+	if (!options || !options.reversedFlowList) throw new Error('use AsyncM.create');
+
 	let reversedFlowList = options.reversedFlowList;
+
+	if (!reversedFlowList) console.error('wtf');
 
 	this._reversedFlowList = reversedFlowList;
 
@@ -287,19 +293,38 @@ AsyncM.result = function(result) {
 	return AsyncM.create(function(onResult) { onResult(result); });
 };
 AsyncM.error = function(error) {
-	let errorException = (error instanceof Error) ? error : new Error();
+	let errorException;
+
+	if (error) {
+		errorException = (error instanceof Error) ? error : new Error();
+	} else {
+		error = new Error();
+		errorException = error;
+	}
+
 	return AsyncM.create(function(onResult, onError) { onError(error, { exception: errorException }); });
 };
 AsyncM._error = function(error, opts) {
+	if (!error) error = new Error();
 	return AsyncM.create(function(onResult, onError) { onError(error, opts); });
 };
 
 AsyncM.pureM = function(f) {
+	//let stack = new Error();
+
 	var m = AsyncM.create(function(onResult, onError) {
 		return f().run(onResult, onError);
 	});
 
-	m.__pureMF = f;
+	m.__pureMF = function() {
+		let m = f.apply(this, arguments);
+
+		if (m instanceof AsyncM) return m;
+
+		//console.error(stack);
+
+		return AsyncM.error(new Error('AsyncM.pureM returns not AsyncM instance'));
+	};
 
 	return m;
 };
