@@ -3,10 +3,14 @@ module.exports = AsyncM;
 require('./asyncmUtil')(AsyncM);
 
 if (typeof window !== 'undefined') {
+	// eslint-disable-next-line no-undef
 	window.AsyncM = AsyncM;
 }
 
-AsyncM.CAUSE = Symbol('cause');
+AsyncM.prototype.__IS_ASYNCM_INSTANCE__ = true;
+
+AsyncM.CANCELLED = '__ASYNCM_CANCELLED__';
+AsyncM.CAUSE = '__ASYNCM_CAUSE__';
 
 var ReversedFlowList = require('./flow-list');
 
@@ -14,8 +18,6 @@ function AsyncM(options) {
 	if (!options || !options.reversedFlowList) throw new Error('use AsyncM.create');
 
 	let reversedFlowList = options.reversedFlowList;
-
-	if (!reversedFlowList) console.error('wtf');
 
 	this._reversedFlowList = reversedFlowList;
 
@@ -53,7 +55,7 @@ function AsyncM(options) {
 			if (!runnedSync) break;
 		}
 
-		function doRun(m) {
+		function doRun() {
 			hasFakeRunning = false;
 
 			var runningFinishedSync = false;
@@ -120,7 +122,7 @@ function AsyncM(options) {
 
 						if (typeof m === 'undefined') continue;
 
-						if (!(m instanceof AsyncM)) {
+						if (!m || !m.__IS_ASYNCM_INSTANCE__) {
 							data = m;
 							continue;
 						}
@@ -170,7 +172,7 @@ function AsyncM(options) {
 
 				var m = cancelHandler(originalData, null, result);
 
-				if (!(m instanceof AsyncM)) m = AsyncM.result(m || result);
+				if (!m || !m.__IS_ASYNCM_INSTANCE__) m = AsyncM.result(m || result);
 
 				return m.next(resultCancelHandler, errorCancelHandler);
 			}
@@ -183,7 +185,7 @@ function AsyncM(options) {
 
 				var m = cancelHandler(originalData, error);
 
-				if (!(m instanceof AsyncM)) m = m ? AsyncM.result(m) : AsyncM.error(error);
+				if (!m || !m.__IS_ASYNCM_INSTANCE__) m = m ? AsyncM.result(m) : AsyncM.error(error);
 
 				return m.next(resultCancelHandler, errorCancelHandler);
 			}
@@ -214,9 +216,7 @@ function AsyncM(options) {
 				}
 
 				let cancelWaiters = [],
-				    finished = false;
-
-				let cancelRunning = null;
+					finished = false;
 
 				if (!hasFakeRunning) {
 					// Ignore results of function calls
@@ -226,7 +226,7 @@ function AsyncM(options) {
 					let oldRunning = running;
 					running = null;
 
-					cancelRunning = oldRunning.cancel(data).run(
+					oldRunning.cancel(data).run(
 						function(result) {
 							cancelHandling(data, null, result, cancelFinishHandling(onResult), cancelFinishHandling(onError));
 						},
@@ -234,10 +234,6 @@ function AsyncM(options) {
 							cancelHandling(data, error, null, cancelFinishHandling(onResult), cancelFinishHandling(onError));
 						}
 					);
-
-					if (finished) {
-						cancelRunning = null;
-					}
 				} else {
 					cancelledAtCounter = executionCounter;
 					cancelCallback = function() {
@@ -248,8 +244,6 @@ function AsyncM(options) {
 				function cancelFinishHandling(cont) {
 					return function(data) {
 						finished = true;
-
-						cancelRunning = null;
 
 						cancelWaiters.forEach(function(f) {
 							f(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
@@ -262,7 +256,7 @@ function AsyncM(options) {
 				}
 
 				return {
-					cancel: AsyncM.fun(function(onResult, onError, data) {
+					cancel: AsyncM.fun(function(onResult, onError) {
 						if (finished) {
 							onError(AsyncM.CANCEL_ERROR.ALREADY_FINISHED);
 							return;
@@ -273,6 +267,13 @@ function AsyncM(options) {
 				};
 			})
 		};
+	};
+	this.runAsPromise = function() {
+		return new Promise((resolve, reject) => {
+			this.run(resolve, reject, () => {
+				reject({ type: AsyncM.CANCELLED });
+			});
+		});
 	};
 }
 
@@ -319,7 +320,7 @@ AsyncM.pureM = function(f) {
 	m.__pureMF = function() {
 		let m = f.apply(this, arguments);
 
-		if (m instanceof AsyncM) return m;
+		if (m && m.__IS_ASYNCM_INSTANCE__) return m;
 
 		//console.error(stack);
 

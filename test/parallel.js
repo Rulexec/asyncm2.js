@@ -86,7 +86,7 @@ describe('AsyncM', function() {
 					count: 100000,
 					limit: 1,
 					drop: true,
-					f: function(i) {
+					f: function() {
 						executedTimes++;
 
 						return AsyncM.result();
@@ -106,7 +106,7 @@ describe('AsyncM', function() {
 				AsyncM.parallel({
 					count: 100000,
 					drop: true,
-					f: function(i) {
+					f: function() {
 						executedTimes++;
 
 						return AsyncM.result();

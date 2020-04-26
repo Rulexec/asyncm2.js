@@ -1,8 +1,6 @@
 var assert = require('assert'),
 
-    AsyncM = require('../asyncm'),
-    testUtil = require('./util'),
-    util = require('util');
+    AsyncM = require('../asyncm');
 
 describe('AsyncM', function() {
 	describe('cancellation handling', function() {

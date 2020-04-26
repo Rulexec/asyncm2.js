@@ -1,17 +1,8 @@
 var assert = require('assert'),
 
-    M = require('../asyncm'),
-    testUtil = require('./util'),
-		util = require('util');
-
-const AsyncM = M;
+    M = require('../asyncm');
 
 describe('M', function() {
-	var resultTwo = M.result(2),
-	    errorTwo = M.error(2);
-
-	var incrementToResult = testUtil.incrementToResult,
-	    incrementToError = testUtil.incrementToError;
 
 	describe('simple cancel', function() {
 		it('should result cancel argument', function(done) {
@@ -38,14 +29,13 @@ describe('M', function() {
 			});
 		});
 	});
-	
+
 	describe('chained cancel', function() {
 		it('should not execute handler', function(done) {
 			var handlerExecuted = false,
 			    cancelHandlerExecuted = false;
 
 			var running = M.sleep(1000).result(function() {
-				firstHandlerExecuted = true;
 				assert(false);
 				return M.sleep(1000);
 			}).run(null, null, function(data) {
@@ -277,13 +267,13 @@ describe('M', function() {
 			var cancelHandlerExecuted = false;
 
 			var running = M.sleep(1000
-			).cancel(function(data) {
+			).cancel(function() {
 				return M.sleep(100).result(function() {
 					cancelHandlerExecuted = true;
 				});
 			}).run();
 
-			running.cancel(1).run().cancel(2).cancel(function(data, error, result) {
+			running.cancel(1).run().cancel(2).cancel(function() {
 				return M.sleep(100).result(function() {
 					return 42;
 				});
