@@ -8,6 +8,11 @@ if (typeof window !== 'undefined') {
 }
 
 AsyncM.prototype.__IS_ASYNCM_INSTANCE__ = true;
+AsyncM.isM = function(obj) {
+	if (!obj) return false;
+
+	return !!obj.__IS_ASYNCM_INSTANCE__;
+};
 
 AsyncM.CANCELLED = '__ASYNCM_CANCELLED__';
 AsyncM.CAUSE = '__ASYNCM_CAUSE__';
@@ -60,10 +65,16 @@ function AsyncM(options) {
 
 			var runningFinishedSync = false;
 
-			running = mRunner(
-				nextHandling(executionCounter, 'result', onResult),
-				nextHandling(executionCounter, 'error', onError)
-			);
+			let errorCallback = nextHandling(executionCounter, 'error', onError);
+
+			try {
+				running = mRunner(
+					nextHandling(executionCounter, 'result', onResult),
+					errorCallback,
+				);
+			} catch (error) {
+				errorCallback(error);
+			}
 
 			if (runningFinishedSync) {
 				running = null;
@@ -122,7 +133,7 @@ function AsyncM(options) {
 
 						if (typeof m === 'undefined') continue;
 
-						if (!m || !m.__IS_ASYNCM_INSTANCE__) {
+						if (!AsyncM.isM(m)) {
 							data = m;
 							continue;
 						}
@@ -172,7 +183,7 @@ function AsyncM(options) {
 
 				var m = cancelHandler(originalData, null, result);
 
-				if (!m || !m.__IS_ASYNCM_INSTANCE__) m = AsyncM.result(m || result);
+				if (!AsyncM.isM(m)) m = AsyncM.result(m || result);
 
 				return m.next(resultCancelHandler, errorCancelHandler);
 			}
@@ -185,7 +196,7 @@ function AsyncM(options) {
 
 				var m = cancelHandler(originalData, error);
 
-				if (!m || !m.__IS_ASYNCM_INSTANCE__) m = m ? AsyncM.result(m) : AsyncM.error(error);
+				if (!AsyncM.isM(m)) m = m ? AsyncM.result(m) : AsyncM.error(error);
 
 				return m.next(resultCancelHandler, errorCancelHandler);
 			}
@@ -320,7 +331,7 @@ AsyncM.pureM = function(f) {
 	m.__pureMF = function() {
 		let m = f.apply(this, arguments);
 
-		if (m && m.__IS_ASYNCM_INSTANCE__) return m;
+		if (AsyncM.isM(m)) return m;
 
 		//console.error(stack);
 
